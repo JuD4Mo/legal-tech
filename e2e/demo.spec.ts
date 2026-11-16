@@ -1,28 +1,131 @@
 import { test, expect } from '@playwright/test';
-test('flujo integrado: CRM, expediente, actuación, archivo versionado, tarea y persistencia',async({page})=>{
- const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('/');await page.getByRole('button',{name:'Entrar a la demostración'}).click();await page.waitForURL('**/dashboard');await expect(page.getByRole('heading',{name:'Hola, Valentina.'})).toBeVisible();
- await page.getByRole('button',{name:'Nuevo cliente',exact:true}).click();
- await page.getByLabel('Nombre o razón social').fill('Cliente Prueba Integrada');await page.getByLabel('Número de documento').fill('DEMO-E2E-01');await page.getByLabel('Correo electrónico').fill('prueba@ejemplo.invalid');await page.getByRole('button',{name:'Guardar cambios'}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
- await page.goto('/clientes');await page.getByRole('link',{name:'Ver Cliente Prueba Integrada',exact:true}).click();await expect(page.getByRole('heading',{name:'Cliente Prueba Integrada'})).toBeVisible();
- await page.getByRole('button',{name:'Editar',exact:true}).click();await page.getByLabel('Ciudad',{exact:true}).fill('Bogotá de prueba');await page.getByRole('button',{name:'Guardar cambios'}).click();await expect(page.getByText('Bogotá de prueba',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Agregar interacción'}).click();await page.getByLabel(/^Título/).fill('Llamada ficticia');await page.getByLabel('Detalle del registro manual').fill('Registro manual de prueba, sin envío externo.');await page.getByRole('button',{name:'Guardar cambios'}).click();await expect(page.getByRole('heading',{name:'Llamada ficticia'})).toBeVisible();
- await page.getByRole('button',{name:'Crear expediente',exact:true}).click();await page.getByLabel('Título del expediente').fill('Expediente Prueba Integrada');await page.getByRole('button',{name:'Guardar cambios'}).click();await page.getByRole('link',{name:/Expediente Prueba Integrada/}).click();
- await page.getByRole('button',{name:'Agregar actuación'}).click();await page.getByLabel(/^Título/).fill('Actuación ficticia');await page.getByLabel('Detalle del registro manual').fill('Revisión manual de los documentos de prueba.');await page.getByRole('button',{name:'Guardar cambios'}).click();await expect(page.getByRole('heading',{name:'Actuación ficticia'})).toBeVisible();
- await page.getByRole('button',{name:'Subir documento',exact:true}).click();await page.getByLabel('Nombre del documento').fill('Archivo Prueba Integrada');await page.locator('input[type=file]').setInputFiles({name:'prueba.txt',mimeType:'text/plain',buffer:Buffer.from('Versión uno de prueba')});await page.getByRole('button',{name:'Guardar cambios'}).click();await page.getByRole('link',{name:/Archivo Prueba Integrada/}).click();
- await page.getByRole('button',{name:'Subir nueva versión'}).click();await page.locator('input[type=file]').setInputFiles({name:'prueba-v2.txt',mimeType:'text/plain',buffer:Buffer.from('Versión dos de prueba')});await page.getByRole('button',{name:'Guardar cambios'}).click();await expect(page.getByText('Versión 2 · prueba-v2.txt',{exact:true})).toBeVisible();await expect(page.getByText('Versión 1 · prueba.txt',{exact:true})).toBeVisible();
- const downloadPromise=page.waitForEvent('download');await page.getByRole('button',{name:'Descargar versión 1',exact:true}).click();expect((await downloadPromise).suggestedFilename()).toBe('prueba.txt');
- await page.reload();await expect(page.getByText('Versión 2 · prueba-v2.txt',{exact:true})).toBeVisible();
- await page.getByRole('link',{name:'Expediente Prueba Integrada',exact:true}).click();await page.getByRole('button',{name:'Agregar actividad'}).click();await page.getByLabel('Título de la actividad').fill('Tarea Prueba Integrada');await page.getByRole('button',{name:'Guardar cambios'}).click();await page.getByRole('link',{name:/Tarea Prueba Integrada/}).click();await page.getByRole('button',{name:'Marcar como completada'}).click();await expect(page.locator('.detail-badges').getByText('completada',{exact:true})).toBeVisible();
- await page.reload();await expect(page.locator('.detail-badges').getByText('completada',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Buscar en su espacio…'}).click();await page.getByRole('textbox',{name:'Buscar clientes, expedientes y documentos'}).fill('Prueba Integrada');await expect(page.locator('.search-results a')).toHaveCount(3);await page.getByRole('button',{name:'Cerrar',exact:true}).click();
- await page.getByRole('combobox',{name:'Cambiar espacio de trabajo'}).selectOption('independiente');await expect(page.getByRole('heading',{name:'Hola, Emilia.'})).toBeVisible();await page.goto('/clientes');await expect(page.getByRole('link',{name:/Cliente Prueba Integrada/})).toHaveCount(0);
- await page.getByRole('combobox',{name:'Cambiar espacio de trabajo'}).selectOption('andino');await page.goto('/configuracion');await page.getByRole('combobox',{name:'Cambiar perfil demo'}).selectOption('m3');await page.goto('/equipo');await expect(page.getByRole('button',{name:'Nuevo miembro'})).toHaveCount(0);await page.goto('/configuracion');await expect(page.getByRole('button',{name:'Restablecer datos de demostración'})).toHaveCount(0);await page.getByRole('combobox',{name:'Cambiar perfil demo'}).selectOption('m1');
- await page.goto('/configuracion');await page.getByRole('button',{name:'Restablecer datos de demostración'}).click();await page.getByRole('button',{name:'Borrar y restablecer'}).click();await expect(page.getByRole('heading',{name:'Hola, Valentina.'})).toBeVisible();await page.goto('/clientes');await expect(page.getByRole('link',{name:/Cliente Prueba Integrada/})).toHaveCount(0);expect(errors).toEqual([]);
+test('flujo integrado: CRM, expediente, actuación, archivo versionado, tarea y persistencia', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Entrar a la demostración' }).click();
+  await page.waitForURL('**/dashboard');
+  await expect(page.getByRole('heading', { name: 'Hola, Valentina.' })).toBeVisible();
+  await page.getByRole('button', { name: 'Nuevo cliente', exact: true }).click();
+  await page.getByLabel('Nombre o razón social').fill('Cliente Prueba Integrada');
+  await page.getByLabel('Número de documento').fill('DEMO-E2E-01');
+  await page.getByLabel('Correo electrónico').fill('prueba@ejemplo.invalid');
+  await page.getByRole('button', { name: 'Guardar cambios' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.goto('/clientes');
+  await page.getByRole('link', { name: 'Ver Cliente Prueba Integrada', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Cliente Prueba Integrada' })).toBeVisible();
+  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  await page.getByLabel('Ciudad', { exact: true }).fill('Bogotá de prueba');
+  await page.getByRole('button', { name: 'Guardar cambios' }).click();
+  await expect(page.getByText('Bogotá de prueba', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Agregar interacción' }).click();
+  await page.getByLabel(/^Título/).fill('Llamada ficticia');
+  await page
+    .getByLabel('Detalle del registro manual')
+    .fill('Registro manual de prueba, sin envío externo.');
+  await page.getByRole('button', { name: 'Guardar cambios' }).click();
+  await expect(page.getByRole('heading', { name: 'Llamada ficticia' })).toBeVisible();
+  await page.getByRole('button', { name: 'Crear expediente', exact: true }).click();
+  await page.getByLabel('Título del expediente').fill('Expediente Prueba Integrada');
+  await page.getByRole('button', { name: 'Guardar cambios' }).click();
+  await page.getByRole('link', { name: /Expediente Prueba Integrada/ }).click();
+  await page.getByRole('button', { name: 'Agregar actuación' }).click();
+  await page.getByLabel(/^Título/).fill('Actuación ficticia');
+  await page
+    .getByLabel('Detalle del registro manual')
+    .fill('Revisión manual de los documentos de prueba.');
+  await page.getByRole('button', { name: 'Guardar cambios' }).click();
+  await expect(page.getByRole('heading', { name: 'Actuación ficticia' })).toBeVisible();
+  await page.getByRole('button', { name: 'Subir documento', exact: true }).click();
+  await page.getByLabel('Nombre del documento').fill('Archivo Prueba Integrada');
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'prueba.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('Versión uno de prueba'),
+  });
+  await page.getByRole('button', { name: 'Guardar cambios' }).click();
+  await page.getByRole('link', { name: /Archivo Prueba Integrada/ }).click();
+  await page.getByRole('button', { name: 'Subir nueva versión' }).click();
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'prueba-v2.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('Versión dos de prueba'),
+  });
+  await page.getByRole('button', { name: 'Guardar cambios' }).click();
+  await expect(page.getByText('Versión 2 · prueba-v2.txt', { exact: true })).toBeVisible();
+  await expect(page.getByText('Versión 1 · prueba.txt', { exact: true })).toBeVisible();
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Descargar versión 1', exact: true }).click();
+  expect((await downloadPromise).suggestedFilename()).toBe('prueba.txt');
+  await page.reload();
+  await expect(page.getByText('Versión 2 · prueba-v2.txt', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Expediente Prueba Integrada', exact: true }).click();
+  await page.getByRole('button', { name: 'Agregar actividad' }).click();
+  await page.getByLabel('Título de la actividad').fill('Tarea Prueba Integrada');
+  await page.getByRole('button', { name: 'Guardar cambios' }).click();
+  await page.getByRole('link', { name: /Tarea Prueba Integrada/ }).click();
+  await page.getByRole('button', { name: 'Marcar como completada' }).click();
+  await expect(
+    page.locator('.detail-badges').getByText('completada', { exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.locator('.detail-badges').getByText('completada', { exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Buscar en su espacio…' }).click();
+  await page
+    .getByRole('textbox', { name: 'Buscar clientes, expedientes y documentos' })
+    .fill('Prueba Integrada');
+  await expect(page.locator('.search-results a')).toHaveCount(3);
+  await page.getByRole('button', { name: 'Cerrar', exact: true }).click();
+  await page
+    .getByRole('combobox', { name: 'Cambiar espacio de trabajo' })
+    .selectOption('independiente');
+  await expect(page.getByRole('heading', { name: 'Hola, Emilia.' })).toBeVisible();
+  await page.goto('/clientes');
+  await expect(page.getByRole('link', { name: /Cliente Prueba Integrada/ })).toHaveCount(0);
+  await page.getByRole('combobox', { name: 'Cambiar espacio de trabajo' }).selectOption('andino');
+  await page.goto('/configuracion');
+  await page.getByRole('combobox', { name: 'Cambiar perfil demo' }).selectOption('m3');
+  await page.goto('/equipo');
+  await expect(page.getByRole('button', { name: 'Nuevo miembro' })).toHaveCount(0);
+  await page.goto('/configuracion');
+  await expect(page.getByRole('button', { name: 'Restablecer datos de demostración' })).toHaveCount(
+    0,
+  );
+  await page.getByRole('combobox', { name: 'Cambiar perfil demo' }).selectOption('m1');
+  await page.goto('/configuracion');
+  await page.getByRole('button', { name: 'Restablecer datos de demostración' }).click();
+  await page.getByRole('button', { name: 'Borrar y restablecer' }).click();
+  await expect(page.getByRole('heading', { name: 'Hola, Valentina.' })).toBeVisible();
+  await page.goto('/clientes');
+  await expect(page.getByRole('link', { name: /Cliente Prueba Integrada/ })).toHaveCount(0);
+  expect(errors).toEqual([]);
 });
-test('navegación, calendario, tema persistente y vista móvil',async({page},testInfo)=>{
- await page.goto('/');await page.getByRole('button',{name:'Entrar a la demostración'}).click();await page.waitForURL('**/dashboard');await expect(page.getByRole('heading',{name:'Actividad reciente'})).toBeVisible();await page.screenshot({path:testInfo.outputPath('dashboard.png'),fullPage:true});
- await page.goto('/agenda');await page.getByRole('button',{name:'Calendario',exact:true}).click();await expect(page.locator('.calendar-grid')).toBeVisible();await page.getByRole('button',{name:'Mes siguiente'}).click();await page.getByRole('button',{name:'Hoy',exact:true}).click();
- await page.getByRole('button',{name:'Cambiar tema'}).click();await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
- await page.setViewportSize({width:390,height:844});await page.goto('/dashboard');await page.getByRole('button',{name:'Abrir navegación'}).click();await page.locator('nav').getByRole('link',{name:'Clientes',exact:true}).click();await expect(page.getByRole('heading',{name:'Clientes y prospectos'})).toBeVisible();await page.screenshot({path:testInfo.outputPath('mobile.png'),fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+test('navegación, calendario, tema persistente y vista móvil', async ({ page }, testInfo) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Entrar a la demostración' }).click();
+  await page.waitForURL('**/dashboard');
+  await expect(page.getByRole('heading', { name: 'Actividad reciente' })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('dashboard.png'), fullPage: true });
+  await page.goto('/agenda');
+  await page.getByRole('button', { name: 'Calendario', exact: true }).click();
+  await expect(page.locator('.calendar-grid')).toBeVisible();
+  await page.getByRole('button', { name: 'Mes siguiente' }).click();
+  await page.getByRole('button', { name: 'Hoy', exact: true }).click();
+  await page.getByRole('button', { name: 'Cambiar tema' }).click();
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/dashboard');
+  await page.getByRole('button', { name: 'Abrir navegación' }).click();
+  await page.locator('nav').getByRole('link', { name: 'Clientes', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Clientes y prospectos' })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('mobile.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
 });

@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 
-test('los indicadores responden a crear y completar tareas; filtros consultan datos reales', async ({ page }) => {
+test('los indicadores responden a crear y completar tareas; filtros consultan datos reales', async ({
+  page,
+}) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Entrar a la demostración' }).click();
   await page.waitForURL('**/dashboard');
@@ -13,9 +15,13 @@ test('los indicadores responden a crear y completar tareas; filtros consultan da
   await expect(pendingCard.locator('.stat-value')).toHaveText(String(initialCount + 1));
 
   await page.goto('/agenda');
-  await page.getByRole('textbox', { name: 'Buscar actividad' }).fill('Tarea para comprobar indicadores');
+  await page
+    .getByRole('textbox', { name: 'Buscar actividad' })
+    .fill('Tarea para comprobar indicadores');
   await expect(page.locator('.agenda-list .task-row')).toHaveCount(1);
-  await page.getByRole('button', { name: 'Completar Tarea para comprobar indicadores', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Completar Tarea para comprobar indicadores', exact: true })
+    .click();
   await expect(page.locator('.agenda-list .task-row')).toHaveCount(0);
   await page.getByRole('combobox', { name: 'Estado de actividad' }).selectOption('completada');
   await expect(page.locator('.agenda-list .task-row')).toHaveCount(1);
@@ -27,10 +33,14 @@ test('los indicadores responden a crear y completar tareas; filtros consultan da
   await expect(page.locator('tbody tr')).toHaveCount(2);
   await page.getByRole('textbox', { name: 'Buscar registros' }).fill('No existe este cliente');
   await expect(page.locator('tbody tr')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'No encontramos registros con estos filtros' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'No encontramos registros con estos filtros' }),
+  ).toBeVisible();
 });
 
-test('archivos de imagen: vínculos, formato, previsualización local y descarga', async ({ page }) => {
+test('archivos de imagen: vínculos, formato, previsualización local y descarga', async ({
+  page,
+}) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Entrar a la demostración' }).click();
   await page.waitForURL('**/dashboard');
@@ -43,7 +53,10 @@ test('archivos de imagen: vínculos, formato, previsualización local y descarga
   await page.locator('input[type=file]').setInputFiles({
     name: 'imagen.png',
     mimeType: 'image/png',
-    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/YQAAAAASUVORK5CYII=', 'base64'),
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a/YQAAAAASUVORK5CYII=',
+      'base64',
+    ),
   });
   await page.getByRole('button', { name: 'Guardar cambios' }).click();
   await page.getByRole('combobox', { name: 'Formato' }).selectOption('image/png');
@@ -52,7 +65,13 @@ test('archivos de imagen: vínculos, formato, previsualización local y descarga
   await expect(page.getByRole('link', { name: 'Isabela del Valle', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Previsualizar versión 1', exact: true }).click();
   await expect(page.getByRole('img', { name: 'imagen.png' })).toBeVisible();
-  await expect.poll(() => page.getByRole('img', { name: 'imagen.png' }).evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
+  await expect
+    .poll(() =>
+      page
+        .getByRole('img', { name: 'imagen.png' })
+        .evaluate((img: HTMLImageElement) => img.naturalWidth),
+    )
+    .toBe(1);
   await page.getByRole('button', { name: 'Cerrar', exact: true }).click();
   const downloading = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Descargar versión 1', exact: true }).click();

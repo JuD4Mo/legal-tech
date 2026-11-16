@@ -1,11 +1,97 @@
 import type { Collection } from '@/types/domain';
-export interface Field { key:string; label:string; type?:string; options?:string[]; required?:boolean }
-export const fields:Partial<Record<Collection,Field[]>>={
- clients:[{key:'name',label:'Nombre o razón social',required:true},{key:'personType',label:'Tipo de persona',options:['natural','jurídica']},{key:'documentType',label:'Tipo de documento',options:['CC','NIT','CE','Pasaporte']},{key:'document',label:'Número de documento / NIT',required:true},{key:'email',label:'Correo electrónico',type:'email'},{key:'phone',label:'Teléfono'},{key:'city',label:'Ciudad'},{key:'address',label:'Dirección'},{key:'representative',label:'Representante legal'},{key:'status',label:'Estado',options:['prospecto','activo','inactivo']},{key:'tags',label:'Etiquetas (separadas por coma)'},{key:'notes',label:'Notas',type:'textarea'}],
- cases:[{key:'name',label:'Título del expediente',required:true},{key:'code',label:'Código interno',required:true},{key:'clientId',label:'Cliente',type:'clients',required:true},{key:'docket',label:'Radicado (ingreso manual)'},{key:'process',label:'Clase de proceso',options:['Civil','Comercial','Familia','Laboral','Administrativo','Penal','Otro']},{key:'court',label:'Juzgado / despacho'},{key:'parties',label:'Partes involucradas'},{key:'assigneeId',label:'Abogado responsable',type:'lawyers',required:true},{key:'status',label:'Estado',options:['abierto','en seguimiento','suspendido','cerrado','archivado']},{key:'priority',label:'Prioridad',options:['baja','media','alta','urgente']},{key:'date',label:'Fecha de apertura',type:'date'},{key:'notes',label:'Resumen y notas',type:'textarea'}],
- tasks:[{key:'name',label:'Título de la actividad',required:true},{key:'type',label:'Tipo',options:['tarea','audiencia','reunión','vencimiento','recordatorio']},{key:'date',label:'Fecha / vencimiento',type:'date',required:true},{key:'time',label:'Hora (Bogotá)',type:'time'},{key:'assigneeId',label:'Responsable',type:'members',required:true},{key:'status',label:'Estado',options:['pendiente','completada','cancelada']},{key:'priority',label:'Prioridad',options:['baja','media','alta','urgente']},{key:'clientId',label:'Cliente asociado',type:'clients'},{key:'caseId',label:'Expediente asociado',type:'cases'},{key:'reminder',label:'Recordatorio interno',options:['1 día antes','El mismo día','Sin recordatorio']},{key:'description',label:'Descripción',type:'textarea'}],
- documents:[{key:'name',label:'Nombre del documento',required:true},{key:'category',label:'Categoría / carpeta',options:['contratos','memoriales','pruebas','providencias','correspondencia','otros']},{key:'clientId',label:'Cliente asociado',type:'clients'},{key:'caseId',label:'Expediente asociado',type:'cases'}],
- timeline:[{key:'name',label:'Título',required:true},{key:'type',label:'Tipo de registro',options:['nota','llamada','correo','reunión','actuación','radicación','providencia']},{key:'date',label:'Fecha',type:'date',required:true},{key:'description',label:'Detalle del registro manual',type:'textarea',required:true}],
- members:[{key:'name',label:'Nombre del miembro',required:true},{key:'email',label:'Correo demo',type:'email',required:true},{key:'role',label:'Rol simulado',options:['administrador','abogado','asistente']},{key:'status',label:'Estado',options:['activo','inactivo']}],
- organizations:[{key:'name',label:'Nombre del espacio',required:true},{key:'mode',label:'Modalidad',options:['firma','individual']}]
+export interface Field {
+  key: string;
+  label: string;
+  type?: string;
+  options?: string[];
+  required?: boolean;
+}
+export const fields: Partial<Record<Collection, Field[]>> = {
+  clients: [
+    { key: 'name', label: 'Nombre o razón social', required: true },
+    { key: 'personType', label: 'Tipo de persona', options: ['natural', 'jurídica'] },
+    { key: 'documentType', label: 'Tipo de documento', options: ['CC', 'NIT', 'CE', 'Pasaporte'] },
+    { key: 'document', label: 'Número de documento / NIT', required: true },
+    { key: 'email', label: 'Correo electrónico', type: 'email' },
+    { key: 'phone', label: 'Teléfono' },
+    { key: 'city', label: 'Ciudad' },
+    { key: 'address', label: 'Dirección' },
+    { key: 'representative', label: 'Representante legal' },
+    { key: 'status', label: 'Estado', options: ['prospecto', 'activo', 'inactivo'] },
+    { key: 'tags', label: 'Etiquetas (separadas por coma)' },
+    { key: 'notes', label: 'Notas', type: 'textarea' },
+  ],
+  cases: [
+    { key: 'name', label: 'Título del expediente', required: true },
+    { key: 'code', label: 'Código interno', required: true },
+    { key: 'clientId', label: 'Cliente', type: 'clients', required: true },
+    { key: 'docket', label: 'Radicado (ingreso manual)' },
+    {
+      key: 'process',
+      label: 'Clase de proceso',
+      options: ['Civil', 'Comercial', 'Familia', 'Laboral', 'Administrativo', 'Penal', 'Otro'],
+    },
+    { key: 'court', label: 'Juzgado / despacho' },
+    { key: 'parties', label: 'Partes involucradas' },
+    { key: 'assigneeId', label: 'Abogado responsable', type: 'lawyers', required: true },
+    {
+      key: 'status',
+      label: 'Estado',
+      options: ['abierto', 'en seguimiento', 'suspendido', 'cerrado', 'archivado'],
+    },
+    { key: 'priority', label: 'Prioridad', options: ['baja', 'media', 'alta', 'urgente'] },
+    { key: 'date', label: 'Fecha de apertura', type: 'date' },
+    { key: 'notes', label: 'Resumen y notas', type: 'textarea' },
+  ],
+  tasks: [
+    { key: 'name', label: 'Título de la actividad', required: true },
+    {
+      key: 'type',
+      label: 'Tipo',
+      options: ['tarea', 'audiencia', 'reunión', 'vencimiento', 'recordatorio'],
+    },
+    { key: 'date', label: 'Fecha / vencimiento', type: 'date', required: true },
+    { key: 'time', label: 'Hora (Bogotá)', type: 'time' },
+    { key: 'assigneeId', label: 'Responsable', type: 'members', required: true },
+    { key: 'status', label: 'Estado', options: ['pendiente', 'completada', 'cancelada'] },
+    { key: 'priority', label: 'Prioridad', options: ['baja', 'media', 'alta', 'urgente'] },
+    { key: 'clientId', label: 'Cliente asociado', type: 'clients' },
+    { key: 'caseId', label: 'Expediente asociado', type: 'cases' },
+    {
+      key: 'reminder',
+      label: 'Recordatorio interno',
+      options: ['1 día antes', 'El mismo día', 'Sin recordatorio'],
+    },
+    { key: 'description', label: 'Descripción', type: 'textarea' },
+  ],
+  documents: [
+    { key: 'name', label: 'Nombre del documento', required: true },
+    {
+      key: 'category',
+      label: 'Categoría / carpeta',
+      options: ['contratos', 'memoriales', 'pruebas', 'providencias', 'correspondencia', 'otros'],
+    },
+    { key: 'clientId', label: 'Cliente asociado', type: 'clients' },
+    { key: 'caseId', label: 'Expediente asociado', type: 'cases' },
+  ],
+  timeline: [
+    { key: 'name', label: 'Título', required: true },
+    {
+      key: 'type',
+      label: 'Tipo de registro',
+      options: ['nota', 'llamada', 'correo', 'reunión', 'actuación', 'radicación', 'providencia'],
+    },
+    { key: 'date', label: 'Fecha', type: 'date', required: true },
+    { key: 'description', label: 'Detalle del registro manual', type: 'textarea', required: true },
+  ],
+  members: [
+    { key: 'name', label: 'Nombre del miembro', required: true },
+    { key: 'email', label: 'Correo demo', type: 'email', required: true },
+    { key: 'role', label: 'Rol simulado', options: ['administrador', 'abogado', 'asistente'] },
+    { key: 'status', label: 'Estado', options: ['activo', 'inactivo'] },
+  ],
+  organizations: [
+    { key: 'name', label: 'Nombre del espacio', required: true },
+    { key: 'mode', label: 'Modalidad', options: ['firma', 'individual'] },
+  ],
 };

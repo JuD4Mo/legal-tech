@@ -122,6 +122,15 @@ Los formularios usan una definición homogénea de campos y Zod, junto con valid
 
 ## Validaciones
 
+### Formato de código
+
+El proyecto utiliza Prettier con indentación de 2 espacios, comillas simples y un ancho objetivo de 100 caracteres. La configuración se comparte mediante `.prettierrc.json`; `.prettierignore` excluye los archivos generados, recursos gráficos y documentación.
+
+```bash
+npm run format        # Aplicar formato al código
+npm run format:check  # Verificar el formato sin modificar archivos
+```
+
 ```bash
 npm run lint
 npm run typecheck

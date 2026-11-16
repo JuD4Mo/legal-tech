@@ -4,25 +4,298 @@ import { can } from './permissions';
 import { validate, validateFile } from './validation';
 import { today, relativeDate } from './dates';
 import type { Collection, Database, Entity, LegalDocument, Session } from '@/types/domain';
-export interface DemoRepository { load():Promise<Database>; save<K extends Collection>(session:Session,collection:K,value:Database[K][number]):Promise<Database>; remove(session:Session,collection:Collection,id:string):Promise<Database>; reset(session:Session):Promise<Database> }
-const connection = () => openDB('legal-special-one',1,{upgrade(db){db.createObjectStore('state');}});
-async function persist(data:Database) { try { const db = await connection(); await db.put('state',data,'demo'); } catch { throw new Error('No fue posible guardar en IndexedDB. Revise el espacio disponible y los permisos de almacenamiento del navegador.'); } }
-export function scoped<K extends Collection>(db:Database,key:K,org:string):Database[K] { return db[key].filter(v=>v.organizationId===org) as Database[K]; }
-function actor(db:Database,s:Session) { const user=db.members.find(m=>m.id===s.memberId&&m.organizationId===s.organizationId&&m.status==='activo'); if(!user) throw new Error('La sesión demo no es válida.'); return user; }
-function check(db:Database,s:Session,key:Collection,action:'save'|'delete'='save') { const user=actor(db,s); if(!can(user.role,key,action)) throw new Error('Su rol no tiene permiso para esta operación en la demo.'); return user; }
-function audit(db:Database,s:Session,key:Collection,id:string,action:string) { const user=actor(db,s); const now=new Date().toISOString(); db.logs.unshift({id:crypto.randomUUID(),organizationId:s.organizationId,createdAt:now,updatedAt:now,createdBy:user.id,name:action,resource:key,resourceId:id,actor:user.name}); }
-function links(db:Database,s:Session,value:Entity) { for(const [field,key] of [['clientId','clients'],['caseId','cases'],['assigneeId','members']] as const) { if(field in value) { const id=(value as unknown as Record<string,string>)[field]; if(id&&!scoped(db,key,s.organizationId).some(e=>e.id===id)) throw new Error('La relación seleccionada no pertenece al espacio activo.'); } } if('caseId' in value && value.caseId && 'clientId' in value) { const c=db.cases.find(c=>c.id===value.caseId); if(c&&value.clientId&&c.clientId!==value.clientId) throw new Error('El cliente y el expediente seleccionados no corresponden.'); } }
-export const repository:DemoRepository = {
- async load(){ try { const db=await connection(); let data:Database|undefined=await db.get('state','demo'); if(!data){data=seed();await db.put('state',data,'demo');} return data; }catch{throw new Error('IndexedDB no está disponible. Habilite el almacenamiento de este sitio para utilizar la demo.');} },
- async save(s,key,value){ const db=await this.load(); check(db,s,key); if(value.organizationId!==s.organizationId) throw new Error('Espacio de trabajo incorrecto.'); const result=validate(key,value); if(result&&!result.success) throw new Error(result.error.issues[0].message); const existing=(db[key] as Entity[]).find(e=>e.id===value.id); if(existing&&existing.organizationId!==s.organizationId) throw new Error('Registro de otro espacio.'); links(db,s,value);
-  if(key==='cases'&&existing&&'clientId' in existing&&'clientId' in value&&existing.clientId!==value.clientId&&[...db.documents,...db.tasks,...db.timeline].some(e=>e.caseId===value.id)) throw new Error('Este expediente ya tiene registros vinculados. Conserve su cliente o cree otro expediente para mantener las relaciones.');
-  if(key==='cases'&&'assigneeId' in value&&!db.members.some(m=>m.id===value.assigneeId&&m.organizationId===s.organizationId&&m.role!=='asistente'&&m.status==='activo')) throw new Error('Seleccione un abogado activo como responsable.');
-  if(key==='clients'&&'document' in value&&db.clients.some(c=>c.organizationId===s.organizationId&&c.id!==value.id&&c.document.trim().toLowerCase()===value.document.trim().toLowerCase())) throw new Error('Ya existe un cliente con este documento en el espacio.');
-  if(key==='cases'&&'code' in value&&db.cases.some(c=>c.organizationId===s.organizationId&&c.id!==value.id&&c.code.toLowerCase()===value.code.toLowerCase())) throw new Error('Este código de expediente ya existe.');
-  if(key==='members'&&existing&&'role' in value&&existing.id===s.memberId&&(value.role!=='administrador'||('status' in value&&value.status!=='activo'))) throw new Error('No puede desactivar ni cambiar su propio rol administrativo.');
-  const rows=db[key] as Entity[]; const index=rows.findIndex(e=>e.id===value.id); const saved={...value,updatedAt:new Date().toISOString()}; if(index<0) rows.unshift(saved);else rows[index]=saved; audit(db,s,key,value.id,`${existing?'Actualización':'Creación'} de ${key==='clients'?'cliente':key==='cases'?'expediente':key==='tasks'?'actividad':key==='documents'?'documento':'registro'}`); if(key==='tasks'&&'assigneeId' in value) { const now=new Date().toISOString();db.notifications.unshift({id:crypto.randomUUID(),organizationId:s.organizationId,createdAt:now,updatedAt:now,createdBy:s.memberId,name:'Actividad actualizada',description:'Tiene una actividad asignada. Consulte su agenda.',memberId:value.assigneeId,read:false,href:`/agenda/${value.id}`}); } await persist(db);return db; },
- async remove(s,key,id){const db=await this.load();check(db,s,key,'delete');const rows=db[key] as Entity[];const item=rows.find(e=>e.id===id&&e.organizationId===s.organizationId);if(!item)throw new Error('Registro no encontrado.');if(key==='clients'&&(db.cases.some(e=>e.clientId===id)||db.documents.some(e=>e.clientId===id)||db.tasks.some(e=>e.clientId===id)||db.timeline.some(e=>e.clientId===id)))throw new Error('Este cliente tiene registros vinculados. Desactívelo para conservar sus relaciones.');if(key==='cases'&&(db.tasks.some(e=>e.caseId===id)||db.documents.some(e=>e.caseId===id)||db.timeline.some(e=>e.caseId===id)))throw new Error('Este expediente tiene registros vinculados. Utilice el estado archivado.');if(key==='members'&&(id===s.memberId||db.cases.some(e=>e.assigneeId===id)||db.tasks.some(e=>e.assigneeId===id)))throw new Error('Este miembro tiene asignaciones o es el usuario activo.'); rows.splice(rows.indexOf(item),1);if(key==='documents')db.versions=db.versions.filter(v=>v.documentId!==id);audit(db,s,key,id,'Eliminación de registro');await persist(db);return db;},
- async reset(s){const db=await this.load();check(db,s,'organizations');const fresh=seed();await persist(fresh);return fresh;}
+export interface DemoRepository {
+  load(): Promise<Database>;
+  save<K extends Collection>(
+    session: Session,
+    collection: K,
+    value: Database[K][number],
+  ): Promise<Database>;
+  remove(session: Session, collection: Collection, id: string): Promise<Database>;
+  reset(session: Session): Promise<Database>;
+}
+const connection = () =>
+  openDB('legal-special-one', 1, {
+    upgrade(db) {
+      db.createObjectStore('state');
+    },
+  });
+async function persist(data: Database) {
+  try {
+    const db = await connection();
+    await db.put('state', data, 'demo');
+  } catch {
+    throw new Error(
+      'No fue posible guardar en IndexedDB. Revise el espacio disponible y los permisos de almacenamiento del navegador.',
+    );
+  }
+}
+export function scoped<K extends Collection>(db: Database, key: K, org: string): Database[K] {
+  return db[key].filter((v) => v.organizationId === org) as Database[K];
+}
+function actor(db: Database, s: Session) {
+  const user = db.members.find(
+    (m) => m.id === s.memberId && m.organizationId === s.organizationId && m.status === 'activo',
+  );
+  if (!user) throw new Error('La sesión demo no es válida.');
+  return user;
+}
+function check(db: Database, s: Session, key: Collection, action: 'save' | 'delete' = 'save') {
+  const user = actor(db, s);
+  if (!can(user.role, key, action))
+    throw new Error('Su rol no tiene permiso para esta operación en la demo.');
+  return user;
+}
+function audit(db: Database, s: Session, key: Collection, id: string, action: string) {
+  const user = actor(db, s);
+  const now = new Date().toISOString();
+  db.logs.unshift({
+    id: crypto.randomUUID(),
+    organizationId: s.organizationId,
+    createdAt: now,
+    updatedAt: now,
+    createdBy: user.id,
+    name: action,
+    resource: key,
+    resourceId: id,
+    actor: user.name,
+  });
+}
+function links(db: Database, s: Session, value: Entity) {
+  for (const [field, key] of [
+    ['clientId', 'clients'],
+    ['caseId', 'cases'],
+    ['assigneeId', 'members'],
+  ] as const) {
+    if (field in value) {
+      const id = (value as unknown as Record<string, string>)[field];
+      if (id && !scoped(db, key, s.organizationId).some((e) => e.id === id))
+        throw new Error('La relación seleccionada no pertenece al espacio activo.');
+    }
+  }
+  if ('caseId' in value && value.caseId && 'clientId' in value) {
+    const c = db.cases.find((c) => c.id === value.caseId);
+    if (c && value.clientId && c.clientId !== value.clientId)
+      throw new Error('El cliente y el expediente seleccionados no corresponden.');
+  }
+}
+export const repository: DemoRepository = {
+  async load() {
+    try {
+      const db = await connection();
+      let data: Database | undefined = await db.get('state', 'demo');
+      if (!data) {
+        data = seed();
+        await db.put('state', data, 'demo');
+      }
+      return data;
+    } catch {
+      throw new Error(
+        'IndexedDB no está disponible. Habilite el almacenamiento de este sitio para utilizar la demo.',
+      );
+    }
+  },
+  async save(s, key, value) {
+    const db = await this.load();
+    check(db, s, key);
+    if (value.organizationId !== s.organizationId)
+      throw new Error('Espacio de trabajo incorrecto.');
+    const result = validate(key, value);
+    if (result && !result.success) throw new Error(result.error.issues[0].message);
+    const existing = (db[key] as Entity[]).find((e) => e.id === value.id);
+    if (existing && existing.organizationId !== s.organizationId)
+      throw new Error('Registro de otro espacio.');
+    links(db, s, value);
+    if (
+      key === 'cases' &&
+      existing &&
+      'clientId' in existing &&
+      'clientId' in value &&
+      existing.clientId !== value.clientId &&
+      [...db.documents, ...db.tasks, ...db.timeline].some((e) => e.caseId === value.id)
+    )
+      throw new Error(
+        'Este expediente ya tiene registros vinculados. Conserve su cliente o cree otro expediente para mantener las relaciones.',
+      );
+    if (
+      key === 'cases' &&
+      'assigneeId' in value &&
+      !db.members.some(
+        (m) =>
+          m.id === value.assigneeId &&
+          m.organizationId === s.organizationId &&
+          m.role !== 'asistente' &&
+          m.status === 'activo',
+      )
+    )
+      throw new Error('Seleccione un abogado activo como responsable.');
+    if (
+      key === 'clients' &&
+      'document' in value &&
+      db.clients.some(
+        (c) =>
+          c.organizationId === s.organizationId &&
+          c.id !== value.id &&
+          c.document.trim().toLowerCase() === value.document.trim().toLowerCase(),
+      )
+    )
+      throw new Error('Ya existe un cliente con este documento en el espacio.');
+    if (
+      key === 'cases' &&
+      'code' in value &&
+      db.cases.some(
+        (c) =>
+          c.organizationId === s.organizationId &&
+          c.id !== value.id &&
+          c.code.toLowerCase() === value.code.toLowerCase(),
+      )
+    )
+      throw new Error('Este código de expediente ya existe.');
+    if (
+      key === 'members' &&
+      existing &&
+      'role' in value &&
+      existing.id === s.memberId &&
+      (value.role !== 'administrador' || ('status' in value && value.status !== 'activo'))
+    )
+      throw new Error('No puede desactivar ni cambiar su propio rol administrativo.');
+    const rows = db[key] as Entity[];
+    const index = rows.findIndex((e) => e.id === value.id);
+    const saved = { ...value, updatedAt: new Date().toISOString() };
+    if (index < 0) rows.unshift(saved);
+    else rows[index] = saved;
+    audit(
+      db,
+      s,
+      key,
+      value.id,
+      `${existing ? 'Actualización' : 'Creación'} de ${key === 'clients' ? 'cliente' : key === 'cases' ? 'expediente' : key === 'tasks' ? 'actividad' : key === 'documents' ? 'documento' : 'registro'}`,
+    );
+    if (key === 'tasks' && 'assigneeId' in value) {
+      const now = new Date().toISOString();
+      db.notifications.unshift({
+        id: crypto.randomUUID(),
+        organizationId: s.organizationId,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: s.memberId,
+        name: 'Actividad actualizada',
+        description: 'Tiene una actividad asignada. Consulte su agenda.',
+        memberId: value.assigneeId,
+        read: false,
+        href: `/agenda/${value.id}`,
+      });
+    }
+    await persist(db);
+    return db;
+  },
+  async remove(s, key, id) {
+    const db = await this.load();
+    check(db, s, key, 'delete');
+    const rows = db[key] as Entity[];
+    const item = rows.find((e) => e.id === id && e.organizationId === s.organizationId);
+    if (!item) throw new Error('Registro no encontrado.');
+    if (
+      key === 'clients' &&
+      (db.cases.some((e) => e.clientId === id) ||
+        db.documents.some((e) => e.clientId === id) ||
+        db.tasks.some((e) => e.clientId === id) ||
+        db.timeline.some((e) => e.clientId === id))
+    )
+      throw new Error(
+        'Este cliente tiene registros vinculados. Desactívelo para conservar sus relaciones.',
+      );
+    if (
+      key === 'cases' &&
+      (db.tasks.some((e) => e.caseId === id) ||
+        db.documents.some((e) => e.caseId === id) ||
+        db.timeline.some((e) => e.caseId === id))
+    )
+      throw new Error('Este expediente tiene registros vinculados. Utilice el estado archivado.');
+    if (
+      key === 'members' &&
+      (id === s.memberId ||
+        db.cases.some((e) => e.assigneeId === id) ||
+        db.tasks.some((e) => e.assigneeId === id))
+    )
+      throw new Error('Este miembro tiene asignaciones o es el usuario activo.');
+    rows.splice(rows.indexOf(item), 1);
+    if (key === 'documents') db.versions = db.versions.filter((v) => v.documentId !== id);
+    audit(db, s, key, id, 'Eliminación de registro');
+    await persist(db);
+    return db;
+  },
+  async reset(s) {
+    const db = await this.load();
+    check(db, s, 'organizations');
+    const fresh = seed();
+    await persist(fresh);
+    return fresh;
+  },
 };
-export async function upload(s:Session, doc:LegalDocument,file:File) { validateFile(file);const db=await repository.load();check(db,s,'documents');if(doc.organizationId!==s.organizationId)throw new Error('Espacio incorrecto.');links(db,s,doc);const old=db.documents.find(d=>d.id===doc.id);if(old&&old.organizationId!==s.organizationId)throw new Error('Documento de otro espacio.');const version=(old?.version??0)+1;const next={...doc,mime:file.type||'application/octet-stream',size:file.size,version,updatedAt:new Date().toISOString(),sample:false};if(old)db.documents[db.documents.indexOf(old)]=next;else db.documents.unshift(next);db.versions.unshift({id:crypto.randomUUID(),organizationId:s.organizationId,createdAt:next.updatedAt,updatedAt:next.updatedAt,createdBy:s.memberId,documentId:doc.id,version,blob:file,name:file.name,mime:next.mime,size:file.size});audit(db,s,'documents',doc.id,`Carga de documento · versión ${version}`);await persist(db);return db; }
-export async function reminders(s:Session){const db=await repository.load();actor(db,s);for(const task of scoped(db,'tasks',s.organizationId).filter(t=>t.assigneeId===s.memberId&&t.status==='pendiente'&&t.reminder!=='Sin recordatorio'&&t.date<=relativeDate(t.reminder==='El mismo día'?0:1))){const id=`reminder-${task.id}-${task.date}-${today()}`;if(!db.notifications.some(n=>n.id===id)){const now=new Date().toISOString();db.notifications.unshift({id,organizationId:s.organizationId,createdAt:now,updatedAt:now,createdBy:s.memberId,name:task.date<today()?'Actividad vencida':'Próximo compromiso',description:task.name,memberId:s.memberId,read:false,href:`/agenda/${task.id}`});}}await persist(db);return db;}
+export async function upload(s: Session, doc: LegalDocument, file: File) {
+  validateFile(file);
+  const db = await repository.load();
+  check(db, s, 'documents');
+  if (doc.organizationId !== s.organizationId) throw new Error('Espacio incorrecto.');
+  links(db, s, doc);
+  const old = db.documents.find((d) => d.id === doc.id);
+  if (old && old.organizationId !== s.organizationId) throw new Error('Documento de otro espacio.');
+  const version = (old?.version ?? 0) + 1;
+  const next = {
+    ...doc,
+    mime: file.type || 'application/octet-stream',
+    size: file.size,
+    version,
+    updatedAt: new Date().toISOString(),
+    sample: false,
+  };
+  if (old) db.documents[db.documents.indexOf(old)] = next;
+  else db.documents.unshift(next);
+  db.versions.unshift({
+    id: crypto.randomUUID(),
+    organizationId: s.organizationId,
+    createdAt: next.updatedAt,
+    updatedAt: next.updatedAt,
+    createdBy: s.memberId,
+    documentId: doc.id,
+    version,
+    blob: file,
+    name: file.name,
+    mime: next.mime,
+    size: file.size,
+  });
+  audit(db, s, 'documents', doc.id, `Carga de documento · versión ${version}`);
+  await persist(db);
+  return db;
+}
+export async function reminders(s: Session) {
+  const db = await repository.load();
+  actor(db, s);
+  for (const task of scoped(db, 'tasks', s.organizationId).filter(
+    (t) =>
+      t.assigneeId === s.memberId &&
+      t.status === 'pendiente' &&
+      t.reminder !== 'Sin recordatorio' &&
+      t.date <= relativeDate(t.reminder === 'El mismo día' ? 0 : 1),
+  )) {
+    const id = `reminder-${task.id}-${task.date}-${today()}`;
+    if (!db.notifications.some((n) => n.id === id)) {
+      const now = new Date().toISOString();
+      db.notifications.unshift({
+        id,
+        organizationId: s.organizationId,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: s.memberId,
+        name: task.date < today() ? 'Actividad vencida' : 'Próximo compromiso',
+        description: task.name,
+        memberId: s.memberId,
+        read: false,
+        href: `/agenda/${task.id}`,
+      });
+    }
+  }
+  await persist(db);
+  return db;
+}

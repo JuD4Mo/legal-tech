@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('la inicialización normal llega al acceso', async ({ page }) => {
   const errors: string[] = [];
-  page.on('pageerror', error => errors.push(error.message));
+  page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Entrar a la demostración' })).toBeVisible();
   expect(errors).toEqual([]);
@@ -14,8 +14,9 @@ test('la marca está centrada con el indicador durante la carga', async ({ page 
   await page.addInitScript(() => {
     const original = IDBFactory.prototype.open;
     IDBFactory.prototype.open = function (name, version) {
-      const request = version === undefined ? original.call(this, name) : original.call(this, name, version);
-      request.addEventListener('success', event => event.stopImmediatePropagation());
+      const request =
+        version === undefined ? original.call(this, name) : original.call(this, name, version);
+      request.addEventListener('success', (event) => event.stopImmediatePropagation());
       return request;
     };
   });

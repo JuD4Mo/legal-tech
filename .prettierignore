@@ -1,0 +1,13 @@
+node_modules/
+.next/
+out/
+dist/
+coverage/
+test-results/
+playwright-report/
+referencias/
+public/
+package-lock.json
+next-env.d.ts
+*.tsbuildinfo
+**/*.md
