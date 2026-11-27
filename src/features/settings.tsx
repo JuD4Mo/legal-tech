@@ -7,6 +7,8 @@ import { Section, Badge, Modal, Empty } from '@/components/ui';
 import { repository, scoped } from '@/lib/repository';
 import { formatDate, initials } from '@/lib/dates';
 import type { Session } from '@/types/domain';
+import { useAccounts } from '@/components/account-context';
+import { accountRepository } from '@/lib/account-repository';
 export function SettingsPage({
   onTheme,
   dark,
@@ -19,6 +21,7 @@ export function SettingsPage({
   onLogout: () => void;
 }) {
   const { db, session, openForm, refresh, notify } = useWorkspace();
+  const auth = useAccounts();
   const [reset, setReset] = useState(false);
   const user = db.members.find((m) => m.id === session.memberId)!;
   const org = db.organizations.find((o) => o.id === session.organizationId)!;
@@ -42,29 +45,31 @@ export function SettingsPage({
               <Badge>{user.role}</Badge>
             </div>
           </div>
-          <label>
-            Probar otro perfil del espacio
-            <select
-              aria-label="Cambiar perfil demo"
-              value={session.memberId}
-              onChange={(e) => void onEnter({ ...session, memberId: e.target.value })}
-            >
-              {scoped(db, 'members', session.organizationId)
-                .filter((m) => m.status === 'activo')
-                .map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} · {m.role}
-                  </option>
-                ))}
-            </select>
-          </label>
+          {!auth.account && (
+            <label>
+              Probar otro perfil del espacio
+              <select
+                aria-label="Cambiar perfil demo"
+                value={session.memberId}
+                onChange={(e) => void onEnter({ ...session, memberId: e.target.value })}
+              >
+                {scoped(db, 'members', session.organizationId)
+                  .filter((m) => m.status === 'activo')
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} · {m.role}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
           <p className="notice">
             Permisos simulados en frontend. Todos los perfiles operativos pueden consultar los
             registros del espacio; el asistente no administra miembros ni elimina registros.
           </p>
           <button className="button secondary" onClick={onLogout}>
             <LogOut size={16} />
-            Salir de la demo
+            {auth.account ? 'Cerrar sesión' : 'Salir de la demo'}
           </button>
         </Section>
         <Section title="Espacio de trabajo">
@@ -94,24 +99,28 @@ export function SettingsPage({
               Solo el administrador puede editar el espacio y sus miembros en esta demo.
             </p>
           )}
-          <label>
-            Seleccionar organización
-            <select
-              value={org.id}
-              onChange={(e) => {
-                const member = db.members.find(
-                  (m) => m.organizationId === e.target.value && m.status === 'activo',
-                );
-                if (member) void onEnter({ organizationId: e.target.value, memberId: member.id });
-              }}
-            >
-              {db.organizations.map((o) => (
-                <option value={o.id} key={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!auth.account && (
+            <label>
+              Seleccionar organización
+              <select
+                value={org.id}
+                onChange={(e) => {
+                  const member = db.members.find(
+                    (m) => m.organizationId === e.target.value && m.status === 'activo',
+                  );
+                  if (member) void onEnter({ organizationId: e.target.value, memberId: member.id });
+                }}
+              >
+                {db.organizations
+                  .filter((o) => ['andino', 'independiente'].includes(o.id))
+                  .map((o) => (
+                    <option value={o.id} key={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
         </Section>
         <Section title="Preferencias de interfaz">
           <div className="setting-row">
@@ -151,8 +160,9 @@ export function SettingsPage({
       {reset && (
         <Modal title="Restablecer la demostración" onClose={() => setReset(false)}>
           <p>
-            Se borrarán todos los registros y archivos de Legal Special One guardados en este
-            navegador, en ambos espacios. Se restaurarán los datos ficticios iniciales.
+            {auth.account
+              ? 'Se restablecerán únicamente los datos de su espacio profesional. Los cambios y autorizaciones creados en ese espacio se eliminarán. Su cuenta y los espacios de otros usuarios se conservarán.'
+              : 'Se restablecerán únicamente los dos espacios de la demostración rápida. Las cuentas registradas y sus espacios propios se conservarán.'}
           </p>
           <div className="form-actions">
             <button className="button secondary" onClick={() => setReset(false)}>
@@ -162,8 +172,12 @@ export function SettingsPage({
               className="button danger-button"
               onClick={async () => {
                 try {
-                  refresh(await repository.reset(session));
-                  await onEnter({ organizationId: 'andino', memberId: 'm1' });
+                  if (auth.account) await auth.reset();
+                  else await accountRepository.resetQuick();
+                  refresh(await repository.load());
+                  await onEnter(
+                    auth.account ? session : { organizationId: 'andino', memberId: 'm1' },
+                  );
                   setReset(false);
                   notify('Datos ficticios restablecidos sin duplicados.');
                 } catch (e) {

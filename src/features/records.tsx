@@ -24,6 +24,7 @@ import { scoped } from '@/lib/repository';
 import { can } from '@/lib/permissions';
 import { formatDate, initials } from '@/lib/dates';
 import type { Collection, Entity } from '@/types/domain';
+import { PortalAccess, TrackingEditor } from './portal-professional';
 const config: Record<
   string,
   { title: string; subtitle: string; singular: string; path: string; label: string }
@@ -627,6 +628,7 @@ export function RecordDetail({ collection, id }: { collection: Collection; id: s
               </button>
             )}
           </Section>
+          {collection === 'cases' && <TrackingEditor key={id} caseId={id} />}
           {['clients', 'cases'].includes(collection) && (
             <Section
               title={
@@ -786,6 +788,7 @@ export function RecordDetail({ collection, id }: { collection: Collection; id: s
                 </button>
               </div>
             </Section>
+            {collection === 'clients' && <PortalAccess key={id} clientId={id} />}
             {collection === 'clients' && (
               <Section title="Expedientes vinculados">
                 {cases.map((c) => (

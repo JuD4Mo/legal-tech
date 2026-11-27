@@ -1,4 +1,6 @@
 @import 'tailwindcss';
+@import './portal.css';
+@import './public.css';
 
 @theme {
   --color-navy-950: #101c2c;

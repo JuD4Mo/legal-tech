@@ -22,6 +22,7 @@ import {
   X,
   Check,
   Building2,
+  MessageSquare,
 } from 'lucide-react';
 import type { Collection, Database, Entity, LegalDocument, Session } from '@/types/domain';
 import { repository, reminders, scoped, upload } from '@/lib/repository';
@@ -32,6 +33,13 @@ import { Dashboard } from '@/features/dashboard';
 import { Records, RecordDetail } from '@/features/records';
 import { Agenda } from '@/features/agenda';
 import { SettingsPage, ActivityPage } from '@/features/settings';
+import { PortalProvider, PortalSelector, usePortal } from './portal-context';
+import { ClientPortal } from '@/features/client-portal';
+import { Communications } from '@/features/portal-professional';
+import { AccountProvider, useAccounts } from './account-context';
+import { PublicHome, AccountAccess } from '@/features/public-access';
+import { ClientWelcome } from '@/features/client-account';
+import type { AccountSnapshot } from '@/types/accounts';
 interface FormState {
   collection: Collection;
   existing?: Entity;
@@ -59,13 +67,31 @@ export const modules = [
   { path: 'expedientes', name: 'Expedientes', icon: BriefcaseBusiness, key: 'cases' },
   { path: 'documentos', name: 'Documentos', icon: Files, key: 'documents' },
   { path: 'agenda', name: 'Agenda', icon: CalendarDays, key: 'tasks' },
+  { path: 'comunicaciones', name: 'Comunicaciones', icon: MessageSquare },
   { path: 'equipo', name: 'Equipo', icon: Users, key: 'members' },
   { path: 'actividad', name: 'Actividad', icon: History },
   { path: 'configuracion', name: 'Configuración', icon: Settings },
 ] as const;
 export function Workspace() {
+  return (
+    <AccountProvider>
+      <PortalProvider>
+        <ProfessionalWorkspace />
+      </PortalProvider>
+    </AccountProvider>
+  );
+}
+function ProfessionalWorkspace() {
+  const portal = usePortal();
+  const auth = useAccounts();
   const [db, setDb] = useState<Database>();
-  const [session, setSession] = useState<Session | null>(null);
+  const [quickSession, setSession] = useState<Session | null>(null);
+  const session =
+    auth.account?.kind === 'lawyer'
+      ? (auth.account.professionalSession ?? null)
+      : auth.identity?.kind === 'quick'
+        ? quickSession
+        : null;
   const [error, setError] = useState('');
   const [form, setForm] = useState<FormState>();
   const [toast, setToast] = useState('');
@@ -78,6 +104,19 @@ export function Workspace() {
   const pathname = usePathname();
   const router = useRouter();
   useEffect(() => {
+    if (
+      !auth.ready ||
+      !db ||
+      ['/', '/ingresar', '/registro/abogado', '/registro/cliente', '/demo'].includes(pathname)
+    )
+      return;
+    if (auth.account?.kind === 'client' && pathname !== '/portal') router.replace('/portal');
+    else if (auth.account?.kind === 'lawyer' && pathname === '/portal')
+      router.replace('/dashboard');
+    else if (!auth.account && auth.identity?.kind !== 'quick')
+      router.replace(auth.signingOut ? '/' : '/ingresar');
+  }, [auth.ready, auth.account, auth.identity, auth.signingOut, db, pathname, router]);
+  useEffect(() => {
     repository
       .load()
       .then(async (data) => {
@@ -88,6 +127,7 @@ export function Workspace() {
           try {
             const s: Session = JSON.parse(stored);
             if (
+              ['andino', 'independiente'].includes(s.organizationId) &&
               data.members.some(
                 (m) =>
                   m.id === s.memberId &&
@@ -108,6 +148,31 @@ export function Workspace() {
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   }, [dark]);
+  useEffect(() => {
+    const reload = () => {
+      void repository
+        .load()
+        .then(setDb)
+        .catch((e) => setToast(e.message));
+    };
+    window.addEventListener('lso-portal-change', reload);
+    const snapshotListener = (event: Event) =>
+      setDb((event as CustomEvent<AccountSnapshot>).detail.main);
+    window.addEventListener('lso-account-snapshot', snapshotListener);
+    const identityListener = () => {
+      setSession(null);
+      setForm(undefined);
+      setSearch(null);
+      setNotifications(false);
+      setMobile(false);
+    };
+    window.addEventListener('lso-identity-change', identityListener);
+    return () => {
+      window.removeEventListener('lso-portal-change', reload);
+      window.removeEventListener('lso-account-snapshot', snapshotListener);
+      window.removeEventListener('lso-identity-change', identityListener);
+    };
+  }, []);
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -154,8 +219,24 @@ export function Workspace() {
     return () => clearTimeout(t);
   }, [toast]);
   async function enter(s: Session) {
+    if (auth.account) {
+      if (
+        auth.account.kind !== 'lawyer' ||
+        s.organizationId !== auth.account.professionalSession?.organizationId ||
+        s.memberId !== auth.account.professionalSession?.memberId
+      ) {
+        setToast('Su cuenta solo puede abrir su propio espacio profesional.');
+        return;
+      }
+    } else {
+      if (!['andino', 'independiente'].includes(s.organizationId)) {
+        setToast('La demostración rápida solo permite los espacios ficticios iniciales.');
+        return;
+      }
+      if (auth.identity?.kind !== 'quick') auth.startQuick();
+    }
     setSession(s);
-    localStorage.setItem('lso-session', JSON.stringify(s));
+    if (!auth.account) localStorage.setItem('lso-session', JSON.stringify(s));
     setForm(undefined);
     setNotifications(false);
     setSearch(null);
@@ -185,6 +266,20 @@ export function Workspace() {
     setDark(!dark);
     localStorage.setItem('lso-theme', dark ? 'light' : 'dark');
   }
+  if (pathname === '/') return <PublicHome />;
+  if (
+    pathname === '/ingresar' ||
+    pathname === '/registro/abogado' ||
+    pathname === '/registro/cliente'
+  )
+    return (
+      <AccountAccess
+        key={pathname}
+        kind={
+          pathname === '/ingresar' ? 'login' : pathname.endsWith('abogado') ? 'lawyer' : 'client'
+        }
+      />
+    );
   if (error)
     return (
       <div className="boot">
@@ -196,7 +291,7 @@ export function Workspace() {
         </button>
       </div>
     );
-  if (!db)
+  if (!db || !auth.ready)
     return (
       <div className="boot">
         <Brand />
@@ -204,7 +299,34 @@ export function Workspace() {
         <p>Preparando su espacio jurídico…</p>
       </div>
     );
-  if (!session) return <Access db={db} enter={enter} />;
+  if (pathname === '/demo' && auth.account) return <Access db={db} enter={enter} />;
+  if (auth.account?.kind === 'client') {
+    const requested = auth.identity?.kind === 'account' ? auth.identity.portalUserId : undefined;
+    const linked =
+      requested && auth.account.portalUserIds.includes(requested)
+        ? requested
+        : auth.account.portalUserIds[0];
+    return linked ? (
+      <ClientPortal db={db} dark={dark} onTheme={theme} selectedUserId={linked} />
+    ) : (
+      <ClientWelcome />
+    );
+  }
+  if (!auth.account && portal.userId && auth.identity?.kind === 'quick')
+    return <ClientPortal db={db} dark={dark} onTheme={theme} />;
+  if (pathname === '/demo') return <Access db={db} enter={enter} />;
+  if (!session) return <AccountAccess kind="login" />;
+  if (
+    !db.members.some(
+      (m) => m.id === session.memberId && m.organizationId === session.organizationId,
+    )
+  )
+    return (
+      <div className="boot">
+        <Brand />
+        <p>Abriendo su nuevo espacio…</p>
+      </div>
+    );
   const user = db.members.find((m) => m.id === session.memberId)!;
   const organization = db.organizations.find((o) => o.id === session.organizationId)!;
   const route = pathname.split('/').filter(Boolean);
@@ -213,6 +335,11 @@ export function Workspace() {
   const notes = scoped(db, 'notifications', session.organizationId).filter(
     (n) => n.memberId === session.memberId,
   );
+  for (const n of portal.state?.notices.filter(
+    (n) => n.recipientId === session.memberId && n.organizationId === session.organizationId,
+  ) ?? []) {
+    notes.push({ ...n, name: n.title, memberId: session.memberId, href: '/comunicaciones' });
+  }
   const unread = notes.filter((n) => !n.read).length;
   const context: Context = {
     db,
@@ -252,7 +379,7 @@ export function Workspace() {
           <nav aria-label="Navegación principal">
             {modules.map((m, i) => (
               <div key={m.path}>
-                {i === 5 && <div className="nav-separator">Administración</div>}
+                {i === 6 && <div className="nav-separator">Administración</div>}
                 <Link
                   href={`/${m.path}`}
                   title={m.name}
@@ -329,23 +456,28 @@ export function Workspace() {
               <kbd>⌘ K</kbd>
             </button>
             <div className="topbar-actions">
-              <select
-                aria-label="Cambiar espacio de trabajo"
-                className="org-selector"
-                value={session.organizationId}
-                onChange={(e) => {
-                  const member = db.members.find(
-                    (m) => m.organizationId === e.target.value && m.status === 'activo',
-                  );
-                  if (member) void enter({ organizationId: e.target.value, memberId: member.id });
-                }}
-              >
-                {db.organizations.map((o) => (
-                  <option value={o.id} key={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
+              <PortalSelector organizationId={session.organizationId} />
+              {!auth.account && (
+                <select
+                  aria-label="Cambiar espacio de trabajo"
+                  className="org-selector"
+                  value={session.organizationId}
+                  onChange={(e) => {
+                    const member = db.members.find(
+                      (m) => m.organizationId === e.target.value && m.status === 'activo',
+                    );
+                    if (member) void enter({ organizationId: e.target.value, memberId: member.id });
+                  }}
+                >
+                  {db.organizations
+                    .filter((o) => ['andino', 'independiente'].includes(o.id))
+                    .map((o) => (
+                      <option value={o.id} key={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                </select>
+              )}
               <button
                 className="icon-button"
                 title="Cambiar tema"
@@ -369,6 +501,19 @@ export function Workspace() {
               >
                 {initials(user.name)}
               </button>
+              {auth.account && (
+                <button
+                  className="icon-button"
+                  aria-label="Cerrar sesión"
+                  onClick={() => {
+                    auth.logout();
+                    setSession(null);
+                    router.push('/');
+                  }}
+                >
+                  Salir
+                </button>
+              )}
             </div>
           </header>
           <main key={`${session.organizationId}-${currentModule.path}`}>
@@ -380,6 +525,8 @@ export function Workspace() {
               <Agenda />
             ) : activeKey ? (
               <Records collection={activeKey} />
+            ) : currentModule.path === 'comunicaciones' ? (
+              <Communications />
             ) : currentModule.path === 'actividad' ? (
               <ActivityPage />
             ) : (
@@ -388,6 +535,7 @@ export function Workspace() {
                 dark={dark}
                 onEnter={enter}
                 onLogout={() => {
+                  auth.logout();
                   localStorage.removeItem('lso-session');
                   setSession(null);
                   router.push('/');
@@ -490,9 +638,14 @@ export function Workspace() {
                 className="icon-button"
                 aria-label={n.read ? 'Marcar no leída' : 'Marcar leída'}
                 onClick={() =>
-                  void save('notifications', { ...n, read: !n.read }).catch((e) =>
-                    setToast(e.message),
-                  )
+                  portal.state?.notices.some((note) => note.id === n.id)
+                    ? void portal.execute(
+                        { kind: 'professional', session },
+                        { type: 'read', noticeId: n.id, read: !n.read },
+                      )
+                    : void save('notifications', { ...n, read: !n.read }).catch((e) =>
+                        setToast(e.message),
+                      )
                 }
               >
                 <Check size={18} />
@@ -514,6 +667,34 @@ export function Workspace() {
   );
 }
 function Access({ db, enter }: { db: Database; enter: (s: Session) => Promise<void> }) {
+  const auth = useAccounts();
+  const router = useRouter();
+  if (auth.account)
+    return (
+      <div className="boot">
+        <Brand />
+        <h1>Explorar los perfiles de demostración</h1>
+        <p>
+          Su cuenta registrada y sus datos se conservarán. Este selector abre únicamente los
+          perfiles ficticios iniciales.
+        </p>
+        <button
+          className="button"
+          onClick={() => {
+            auth.startQuick();
+            router.push('/demo');
+          }}
+        >
+          Abrir demostración rápida
+        </button>
+        <Link href="/" className="text-link">
+          Volver al inicio
+        </Link>
+      </div>
+    );
+  return <DemoAccess db={db} enter={enter} />;
+}
+function DemoAccess({ db, enter }: { db: Database; enter: (s: Session) => Promise<void> }) {
   const [org, setOrg] = useState('andino');
   const [member, setMember] = useState('m1');
   return (
@@ -563,11 +744,13 @@ function Access({ db, enter }: { db: Database; enter: (s: Session) => Promise<vo
                 setMember(db.members.find((m) => m.organizationId === e.target.value)!.id);
               }}
             >
-              {db.organizations.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
+              {db.organizations
+                .filter((o) => ['andino', 'independiente'].includes(o.id))
+                .map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {o.name}
+                  </option>
+                ))}
             </select>
           </label>
           <label>
@@ -598,6 +781,7 @@ function Access({ db, enter }: { db: Database; enter: (s: Session) => Promise<vo
           <small className="muted">
             Los roles y la separación entre espacios son simulados en el navegador.
           </small>
+          <PortalSelector />
         </div>
         <div className="access-bottom">
           La gestión jurídica, en un solo lugar. <span>© {new Date().getFullYear()} LSO</span>
