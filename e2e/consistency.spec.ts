@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test('los indicadores responden a crear y completar tareas; filtros consultan datos reales', async ({
   page,
 }) => {
-  await page.goto('/');
+  await page.goto('/demo');
   await page.getByRole('button', { name: 'Entrar a la demostración' }).click();
   await page.waitForURL('**/dashboard');
   const pendingCard = page.locator('.stat-card').filter({ hasText: 'Actividades pendientes' });
@@ -41,7 +41,7 @@ test('los indicadores responden a crear y completar tareas; filtros consultan da
 test('archivos de imagen: vínculos, formato, previsualización local y descarga', async ({
   page,
 }) => {
-  await page.goto('/');
+  await page.goto('/demo');
   await page.getByRole('button', { name: 'Entrar a la demostración' }).click();
   await page.waitForURL('**/dashboard');
   await page.goto('/documentos');

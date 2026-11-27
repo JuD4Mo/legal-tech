@@ -4,7 +4,7 @@ test('flujo integrado: CRM, expediente, actuación, archivo versionado, tarea y 
 }) => {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto('/');
+  await page.goto('/demo');
   await page.getByRole('button', { name: 'Entrar a la demostración' }).click();
   await page.waitForURL('**/dashboard');
   await expect(page.getByRole('heading', { name: 'Hola, Valentina.' })).toBeVisible();
@@ -106,7 +106,7 @@ test('flujo integrado: CRM, expediente, actuación, archivo versionado, tarea y 
   expect(errors).toEqual([]);
 });
 test('navegación, calendario, tema persistente y vista móvil', async ({ page }, testInfo) => {
-  await page.goto('/');
+  await page.goto('/demo');
   await page.getByRole('button', { name: 'Entrar a la demostración' }).click();
   await page.waitForURL('**/dashboard');
   await expect(page.getByRole('heading', { name: 'Actividad reciente' })).toBeVisible();

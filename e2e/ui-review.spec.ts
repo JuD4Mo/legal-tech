@@ -64,7 +64,7 @@ for (const viewport of [
   }, testInfo) => {
     test.setTimeout(120000);
     await page.setViewportSize(viewport);
-    await page.goto('/');
+    await page.goto('/demo');
     await expect(page.getByRole('button', { name: 'Entrar a la demostración' })).toBeVisible();
     expect(await inspectTypography(page), 'Acceso').toEqual([]);
     await page.getByRole('button', { name: 'Entrar a la demostración' }).click();

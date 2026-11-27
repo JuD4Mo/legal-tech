@@ -1,10 +1,12 @@
 import { test, expect } from '@playwright/test';
 
-test('la inicialización normal llega al acceso', async ({ page }) => {
+test('la ruta principal presenta el producto y ambos registros', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Entrar a la demostración' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Registrarme como abogado' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Registrarme como cliente' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Iniciar sesión', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -20,7 +22,7 @@ test('la marca está centrada con el indicador durante la carga', async ({ page 
       return request;
     };
   });
-  await page.goto('/');
+  await page.goto('/demo');
   await expect(page.getByText('Preparando su espacio jurídico…')).toBeVisible();
   await expect(page.locator('.brand-symbol')).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
