@@ -4,6 +4,7 @@ import { can } from './permissions';
 import { validate, validateFile } from './validation';
 import { today, relativeDate } from './dates';
 import type { Collection, Database, Entity, LegalDocument, Session } from '@/types/domain';
+import type { PortalState } from '@/types/portal';
 export interface DemoRepository {
   load(): Promise<Database>;
   save<K extends Collection>(
@@ -195,6 +196,17 @@ export const repository: DemoRepository = {
     const rows = db[key] as Entity[];
     const item = rows.find((e) => e.id === id && e.organizationId === s.organizationId);
     if (!item) throw new Error('Registro no encontrado.');
+    const local = await connection();
+    const portal: PortalState | undefined = await local.get('state', 'portal-v1');
+    if (
+      (key === 'clients' && portal?.users.some((u) => u.clientId === id)) ||
+      (key === 'cases' &&
+        (portal?.grants.some((g) => g.caseId === id) ||
+          portal?.drafts.some((d) => d.caseId === id)))
+    )
+      throw new Error(
+        'Este registro tiene registros vinculados al portal. Utilice el archivado o la desactivación para conservar el historial.',
+      );
     if (
       key === 'clients' &&
       (db.cases.some((e) => e.clientId === id) ||
@@ -228,9 +240,11 @@ export const repository: DemoRepository = {
   async reset(s) {
     const db = await this.load();
     check(db, s, 'organizations');
-    const fresh = seed();
-    await persist(fresh);
-    return fresh;
+    if (!['andino', 'independiente'].includes(s.organizationId))
+      throw new Error('Restablezca su espacio propio desde la configuración de su cuenta.');
+    const { accountRepository } = await import('./account-repository');
+    await accountRepository.resetQuick();
+    return this.load();
   },
 };
 export async function upload(s: Session, doc: LegalDocument, file: File) {
